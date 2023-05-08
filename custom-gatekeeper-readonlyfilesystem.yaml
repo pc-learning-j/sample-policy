@@ -34,7 +34,7 @@ spec:
         violation[{"msg": msg}] {
             input.review.kind.kind == "Deployment"
 
-            some container in input.request.object.spec.template.spec.containers
+            some container in input.review.object.spec.template.spec.containers
             not container.resources.limits.memory
             msg := sprintf("Container '%v/%v' does not have memory limits", [input.review.object.metadata.name, container.name])
         }
