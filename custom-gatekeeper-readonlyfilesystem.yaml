@@ -1,12 +1,12 @@
 apiVersion: templates.gatekeeper.sh/v1beta1
 kind: ConstraintTemplate
 metadata:
-  name: k8sazurev3readonlyrootfilesystem
+  name: k8sazurecustomreadonlyrootfilesystem
 spec:
   crd:
     spec:
       names:
-        kind: K8sAzureV3ReadOnlyRootFilesystem
+        kind: K8sAzureCustomReadOnlyRootFilesystem
       validation:
         # Schema for the `parameters` field
         openAPIV3Schema:
@@ -27,7 +27,7 @@ spec:
   targets:
     - target: admission.k8s.gatekeeper.sh
       rego: |
-        package k8sazurev3readonlyrootfilesystem
+        package k8sazurecustomreadonlyrootfilesystem
 
         import data.lib.exclude_container_image.is_excluded
 
@@ -37,7 +37,7 @@ spec:
             not input_container_excluded(c.name)
             not is_excluded(c)
             input_read_only_root_fs(c)
-            msg := sprintf("Readonly root filesystem is required for container. pod:'%v', container:'%v'", [input.review.object.metadata.name, c.name])
+            msg := sprintf("Readonly root filesystem is required for container. pod:'%v', container:'%v', for more info, refer https://kubernetes.io/docs/tasks/configure-pod-container/security-context/", [input.review.object.metadata.name, c.name])
         }
 
         input_read_only_root_fs(c) {
