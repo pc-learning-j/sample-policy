@@ -29,66 +29,55 @@ spec:
       rego: |
         package k8sazurecustomreadonlyrootfilesystem
         
-        import future.keywords.in
-
-        violation[{"msg": msg}] {
-            input.review.kind.kind == "Deployment"
-
-            some container in input.review.object.spec.template.spec.containers
-            not container.resources.limits.memory
-            msg := sprintf("Container '%v/%v' does not have memory limits", [input.review.object.metadata.name, container.name])
+        import data.lib.exclude_container_image.is_excluded
+        violation[{"msg": msg, "details": {}}] {
+            not input.review.object.spec.template.spec.nodeSelector["kubernetes.io/os"] == "windows"
+            c := input_containers[_]
+            not input_container_excluded(c.name)
+            not is_excluded(c)
+            input_read_only_root_fs(c)
+            msg := sprintf("Readonly root filesystem is required for container. pod:'%v', container:'%v', for more info, refer https://kubernetes.io/docs/tasks/configure-pod-container/security-context/", [input.review.object.metadata.name, c.name])
         }
 
-#         import data.lib.exclude_container_image.is_excluded
+        input_read_only_root_fs(c) {
+            not has_field(c, "securityContext")
+        }
+        input_read_only_root_fs(c) {
+            not c.securityContext.readOnlyRootFilesystem == true
+        }
 
-#         violation[{"msg": msg, "details": {}}] {
-#             not input.review.object.spec.template.spec.nodeSelector["kubernetes.io/os"] == "windows"
-#             c := input_containers[_]
-#             not input_container_excluded(c.name)
-#             not is_excluded(c)
-#             input_read_only_root_fs(c)
-#             msg := sprintf("Readonly root filesystem is required for container. pod:'%v', container:'%v', for more info, refer https://kubernetes.io/docs/tasks/configure-pod-container/security-context/", [input.review.object.metadata.name, c.name])
-#         }
+        input_containers[c] {
+            c := input.review.object.spec.template.spec.containers[_]
+        }
+        input_containers[c] {
+            c := input.review.object.spec.template.spec.initContainers[_]
+        }
+        input_containers[c] {
+            c := input.review.object.spec.template.spec.ephemeralContainers[_]
+        }
+        input_container_excluded(field) {
+            field == input.parameters.excludedContainers[_]
+        }
 
-#         input_read_only_root_fs(c) {
-#             not has_field(c, "securityContext")
-#         }
-#         input_read_only_root_fs(c) {
-#             not c.securityContext.readOnlyRootFilesystem == true
-#         }
-
-#         input_containers[c] {
-#             c := input.review.object.spec.template.spec.containers[_]
-#         }
-#         input_containers[c] {
-#             c := input.review.object.spec.template.spec.initContainers[_]
-#         }
-#         input_containers[c] {
-#             c := input.review.object.spec.template.spec.ephemeralContainers[_]
-#         }
-#         input_container_excluded(field) {
-#             field == input.parameters.excludedContainers[_]
-#         }
-
-#         # has_field returns whether an object has a field
-#         has_field(object, field) = true {
-#             object[field]
-#         }
-#       libs:
-#         - |
-#           package lib.exclude_container_image
-#           is_excluded(container) {
-#               exclude_images := object.get(object.get(input, "parameters", {}), "excludedImages", [])
-#               img := container.image
-#               exclusion := exclude_images[_]
-#               _matches_exclusion(img, exclusion)
-#           }
-#           _matches_exclusion(img, exclusion) {
-#               not endswith(exclusion, "*")
-#               exclusion == img
-#           }
-#           _matches_exclusion(img, exclusion) {
-#               endswith(exclusion, "*")
-#               prefix := trim_suffix(exclusion, "*")
-#               startswith(img, prefix)
-#           }
+        # has_field returns whether an object has a field
+        has_field(object, field) = true {
+            object[field]
+        }
+      libs:
+        - |
+          package lib.exclude_container_image
+          is_excluded(container) {
+              exclude_images := object.get(object.get(input, "parameters", {}), "excludedImages", [])
+              img := container.image
+              exclusion := exclude_images[_]
+              _matches_exclusion(img, exclusion)
+          }
+          _matches_exclusion(img, exclusion) {
+              not endswith(exclusion, "*")
+              exclusion == img
+          }
+          _matches_exclusion(img, exclusion) {
+              endswith(exclusion, "*")
+              prefix := trim_suffix(exclusion, "*")
+              startswith(img, prefix)
+          }
